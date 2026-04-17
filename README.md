@@ -318,6 +318,7 @@ If you are using `ginlogctx` in a real Gin service and want to improve its ergon
 For the repository Git workflow, branch naming, commit prefixes, and tag conventions, see:
 
 - [Contributing Guide](./docs/CONTRIBUTING.md)
+- [Changelog](./CHANGELOG.md)
 
 ## License
 
