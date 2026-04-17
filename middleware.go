@@ -37,10 +37,22 @@ func Middleware(cfg Config) gin.HandlerFunc {
 			"durationMs": time.Since(startedAt).Milliseconds(),
 		}
 
-		logrus.StandardLogger().
+		requestLogLogger(logrus.StandardLogger()).
 			WithFields(logFields).
 			Log(cfg.RequestLogLevel, cfg.RequestLogMessage)
 	}
+}
+
+func requestLogLogger(base *logrus.Logger) *logrus.Logger {
+	logger := logrus.New()
+	logger.Out = base.Out
+	logger.Formatter = base.Formatter
+	logger.Hooks = base.Hooks
+	logger.Level = base.Level
+	logger.ExitFunc = base.ExitFunc
+	logger.ReportCaller = false
+	logger.BufferPool = base.BufferPool
+	return logger
 }
 
 func scopedFieldsForRequest(c *gin.Context, cfg Config) logrus.Fields {

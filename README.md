@@ -56,6 +56,7 @@ require github.com/FabioRNobrega/ginlogctx
 - Enriches plain `logrus.Info/Error/Warn/...` calls through a Logrus hook
 - Supports custom request-scoped fields through resolvers
 - Includes optional request completion logging
+- Keeps the built-in request completion log focused on HTTP fields instead of caller metadata
 - Preserves explicitly set log fields instead of overwriting them
 - Keeps setup small and easy to drop into existing Gin services
 
@@ -241,13 +242,13 @@ Possible output:
 
 ## Request Completion Logs
 
-By default, `ginlogctx` also emits a request completion log with:
+By default, `ginlogctx` also emits a request completion log with the message `request completed` and these fields:
 - `method`
 - `path`
 - `status`
 - `durationMs`
 
-You can customize that behavior:
+You can customize both the message and the level:
 
 ```go
 cfg := ginlogctx.DefaultConfig()
@@ -262,6 +263,10 @@ cfg := ginlogctx.DefaultConfig()
 cfg.IncludeRequestLog = false
 ```
 
+This only disables the built-in request completion log emitted by `ginlogctx`.
+Request-scoped fields such as `request_id` and your custom fields still continue to
+be attached to the other `logrus` entries emitted during the request.
+
 ## API
 
 Main types and functions:
@@ -272,6 +277,13 @@ Main types and functions:
 - `ginlogctx.Middleware(cfg Config) gin.HandlerFunc`
 - `type ginlogctx.Field`
 - `type ginlogctx.Config`
+
+Useful `Config` fields:
+
+- `IncludeRequestLog` enables or disables the built-in request completion log
+- `RequestLogMessage` customizes the request completion message
+- `RequestLogLevel` customizes the level used for the request completion log
+- `Fields` registers custom request-scoped fields such as `user_id`
 
 ## Notes
 

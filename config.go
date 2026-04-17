@@ -25,6 +25,10 @@ type Field struct {
 //
 // By default ginlogctx adds only request_id. Additional request fields such as
 // user_id or product_id can be registered through Fields or AdditionalFields.
+//
+// IncludeRequestLog controls whether Middleware emits the built-in request
+// completion log. RequestLogMessage and RequestLogLevel customize that log when
+// it is enabled.
 type Config struct {
 	RequestIDField    string
 	RequestIDHeader   string
@@ -38,7 +42,8 @@ type Config struct {
 // DefaultConfig returns the default ginlogctx configuration.
 //
 // The default setup adds request_id, emits a request completion log at info
-// level, and uses the X-Request-ID header as the request ID fallback.
+// level with the message "request completed", and uses the X-Request-ID header
+// as the request ID fallback.
 func DefaultConfig() Config {
 	return Config{
 		RequestIDField:    defaultRequestIDField,

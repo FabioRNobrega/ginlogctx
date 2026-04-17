@@ -105,12 +105,15 @@ func TestMiddlewareRequestCompletedLog(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	logger, entries := newTestLogger()
+	logger.SetReportCaller(true)
 	Install(logger, DefaultConfig())
 	original := logrus.StandardLogger().Out
 	originalFormatter := logrus.StandardLogger().Formatter
 	originalHooks := logrus.StandardLogger().Hooks
+	originalReportCaller := logrus.StandardLogger().ReportCaller
 	logrus.SetOutput(logger.Out)
 	logrus.SetFormatter(logger.Formatter)
+	logrus.SetReportCaller(logger.ReportCaller)
 	logrus.StandardLogger().ReplaceHooks(make(logrus.LevelHooks))
 	for _, level := range logrus.AllLevels {
 		for _, hook := range logger.Hooks[level] {
@@ -120,6 +123,7 @@ func TestMiddlewareRequestCompletedLog(t *testing.T) {
 	t.Cleanup(func() {
 		logrus.SetOutput(original)
 		logrus.SetFormatter(originalFormatter)
+		logrus.SetReportCaller(originalReportCaller)
 		logrus.StandardLogger().ReplaceHooks(originalHooks)
 	})
 
@@ -162,6 +166,12 @@ func TestMiddlewareRequestCompletedLog(t *testing.T) {
 	}
 	if logEntry["user_id"] != "user-3" {
 		t.Fatalf("user_id = %v, want user-3", logEntry["user_id"])
+	}
+	if _, exists := logEntry["file"]; exists {
+		t.Fatalf("file unexpectedly present on request completion log")
+	}
+	if _, exists := logEntry["func"]; exists {
+		t.Fatalf("func unexpectedly present on request completion log")
 	}
 }
 
