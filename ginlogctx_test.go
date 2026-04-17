@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 
 	ginrequestid "github.com/gin-contrib/requestid"
 	"github.com/gin-gonic/gin"
@@ -16,15 +17,24 @@ import (
 
 const testUserIDHeader = "X-User-ID"
 
+const (
+	testRequestID1 = "11111111-1111-1111-1111-111111111111"
+	testRequestID2 = "22222222-2222-2222-2222-222222222222"
+	testRequestID3 = "33333333-3333-3333-3333-333333333333"
+	testRequestID4 = "44444444-4444-4444-4444-444444444444"
+	testHandlerDelay = 15 * time.Millisecond
+)
+
 func TestHookAddsScopedFields(t *testing.T) {
 	t.Setenv("GIN_MODE", gin.TestMode)
 	gin.SetMode(gin.TestMode)
 
 	logger, entries := newTestLogger()
 	Install(logger, DefaultConfig())
+	setupStandardLoggerForTest(t, logger)
 
 	router := gin.New()
-	router.Use(ginrequestid.New(ginrequestid.WithCustomHeaderStrKey(defaultRequestIDHeader)))
+	router.Use(ginrequestid.New())
 	cfg := DefaultConfig()
 	cfg.Fields = []Field{
 		{
@@ -42,7 +52,7 @@ func TestHookAddsScopedFields(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/hook", nil)
-	req.Header.Set(defaultRequestIDHeader, "req-1")
+	req.Header.Set(defaultRequestIDHeader, testRequestID1)
 	req.Header.Set(testUserIDHeader, "user-1")
 	resp := httptest.NewRecorder()
 
@@ -53,8 +63,9 @@ func TestHookAddsScopedFields(t *testing.T) {
 	}
 
 	logEntry := findEntry(t, entries, "inside handler")
-	if logEntry[defaultRequestIDField] != "req-1" {
-		t.Fatalf("request_id = %v, want req-1", logEntry[defaultRequestIDField])
+	logCapturedEntry(t, "scoped handler log", logEntry)
+	if logEntry[defaultRequestIDField] != testRequestID1 {
+		t.Fatalf("request_id = %v, want %s", logEntry[defaultRequestIDField], testRequestID1)
 	}
 	if logEntry["user_id"] != "user-1" {
 		t.Fatalf("user_id = %v, want user-1", logEntry["user_id"])
@@ -67,9 +78,10 @@ func TestHookDoesNotOverwriteExplicitFields(t *testing.T) {
 
 	logger, entries := newTestLogger()
 	Install(logger, DefaultConfig())
+	setupStandardLoggerForTest(t, logger)
 
 	router := gin.New()
-	router.Use(ginrequestid.New(ginrequestid.WithCustomHeaderStrKey(defaultRequestIDHeader)))
+	router.Use(ginrequestid.New())
 	router.Use(Middleware(DefaultConfig()))
 	router.GET("/hook", func(c *gin.Context) {
 		logger.WithField(defaultRequestIDField, "explicit").Info("inside handler")
@@ -77,7 +89,7 @@ func TestHookDoesNotOverwriteExplicitFields(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/hook", nil)
-	req.Header.Set(defaultRequestIDHeader, "req-2")
+	req.Header.Set(defaultRequestIDHeader, testRequestID2)
 	resp := httptest.NewRecorder()
 
 	router.ServeHTTP(resp, req)
@@ -107,28 +119,10 @@ func TestMiddlewareRequestCompletedLog(t *testing.T) {
 	logger, entries := newTestLogger()
 	logger.SetReportCaller(true)
 	Install(logger, DefaultConfig())
-	original := logrus.StandardLogger().Out
-	originalFormatter := logrus.StandardLogger().Formatter
-	originalHooks := logrus.StandardLogger().Hooks
-	originalReportCaller := logrus.StandardLogger().ReportCaller
-	logrus.SetOutput(logger.Out)
-	logrus.SetFormatter(logger.Formatter)
-	logrus.SetReportCaller(logger.ReportCaller)
-	logrus.StandardLogger().ReplaceHooks(make(logrus.LevelHooks))
-	for _, level := range logrus.AllLevels {
-		for _, hook := range logger.Hooks[level] {
-			logrus.StandardLogger().AddHook(hook)
-		}
-	}
-	t.Cleanup(func() {
-		logrus.SetOutput(original)
-		logrus.SetFormatter(originalFormatter)
-		logrus.SetReportCaller(originalReportCaller)
-		logrus.StandardLogger().ReplaceHooks(originalHooks)
-	})
+	setupStandardLoggerForTest(t, logger)
 
 	router := gin.New()
-	router.Use(ginrequestid.New(ginrequestid.WithCustomHeaderStrKey(defaultRequestIDHeader)))
+	router.Use(ginrequestid.New())
 	cfg := DefaultConfig()
 	cfg.Fields = []Field{
 		{
@@ -141,17 +135,19 @@ func TestMiddlewareRequestCompletedLog(t *testing.T) {
 	}
 	router.Use(Middleware(cfg))
 	router.GET("/done", func(c *gin.Context) {
+		time.Sleep(testHandlerDelay)
 		c.Status(http.StatusAccepted)
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/done", nil)
-	req.Header.Set(defaultRequestIDHeader, "req-3")
+	req.Header.Set(defaultRequestIDHeader, testRequestID3)
 	req.Header.Set(testUserIDHeader, "user-3")
 	resp := httptest.NewRecorder()
 
 	router.ServeHTTP(resp, req)
 
 	logEntry := findEntry(t, entries, defaultRequestLogMsg)
+	logCapturedEntry(t, "request completion log", logEntry)
 	if logEntry["method"] != http.MethodGet {
 		t.Fatalf("method = %v, want %s", logEntry["method"], http.MethodGet)
 	}
@@ -161,8 +157,11 @@ func TestMiddlewareRequestCompletedLog(t *testing.T) {
 	if got := int(logEntry["status"].(float64)); got != http.StatusAccepted {
 		t.Fatalf("status = %d, want %d", got, http.StatusAccepted)
 	}
-	if logEntry[defaultRequestIDField] != "req-3" {
-		t.Fatalf("request_id = %v, want req-3", logEntry[defaultRequestIDField])
+	if got := int64(logEntry["durationMs"].(float64)); got < testHandlerDelay.Milliseconds() {
+		t.Fatalf("durationMs = %d, want at least %d", got, testHandlerDelay.Milliseconds())
+	}
+	if logEntry[defaultRequestIDField] != testRequestID3 {
+		t.Fatalf("request_id = %v, want %s", logEntry[defaultRequestIDField], testRequestID3)
 	}
 	if logEntry["user_id"] != "user-3" {
 		t.Fatalf("user_id = %v, want user-3", logEntry["user_id"])
@@ -181,6 +180,7 @@ func TestMiddlewareSupportsCustomFields(t *testing.T) {
 
 	logger, entries := newTestLogger()
 	Install(logger, DefaultConfig())
+	setupStandardLoggerForTest(t, logger)
 
 	cfg := DefaultConfig()
 	cfg.Fields = []Field{
@@ -194,7 +194,7 @@ func TestMiddlewareSupportsCustomFields(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.Use(ginrequestid.New(ginrequestid.WithCustomHeaderStrKey(defaultRequestIDHeader)))
+	router.Use(ginrequestid.New())
 	router.Use(Middleware(cfg))
 	router.GET("/hook", func(c *gin.Context) {
 		logger.Info("inside handler")
@@ -202,7 +202,7 @@ func TestMiddlewareSupportsCustomFields(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/hook", nil)
-	req.Header.Set(defaultRequestIDHeader, "req-product")
+	req.Header.Set(defaultRequestIDHeader, testRequestID4)
 	req.Header.Set("X-Product-ID", "product-7")
 	resp := httptest.NewRecorder()
 
@@ -220,9 +220,10 @@ func TestBindingClearedAfterRequest(t *testing.T) {
 
 	logger, entries := newTestLogger()
 	Install(logger, DefaultConfig())
+	setupStandardLoggerForTest(t, logger)
 
 	router := gin.New()
-	router.Use(ginrequestid.New(ginrequestid.WithCustomHeaderStrKey(defaultRequestIDHeader)))
+	router.Use(ginrequestid.New())
 	router.Use(Middleware(DefaultConfig()))
 	router.GET("/done", func(c *gin.Context) {
 		logger.Info("inside handler")
@@ -230,7 +231,7 @@ func TestBindingClearedAfterRequest(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/done", nil)
-	req.Header.Set(defaultRequestIDHeader, "req-4")
+	req.Header.Set(defaultRequestIDHeader, testRequestID4)
 	resp := httptest.NewRecorder()
 
 	router.ServeHTTP(resp, req)
@@ -248,9 +249,10 @@ func TestConcurrentRequestsDoNotLeakFields(t *testing.T) {
 
 	logger, entries := newTestLogger()
 	Install(logger, DefaultConfig())
+	setupStandardLoggerForTest(t, logger)
 
 	router := gin.New()
-	router.Use(ginrequestid.New(ginrequestid.WithCustomHeaderStrKey(defaultRequestIDHeader)))
+	router.Use(ginrequestid.New())
 	router.Use(Middleware(DefaultConfig()))
 	router.GET("/parallel", func(c *gin.Context) {
 		logger.WithField("message_id", c.GetHeader(defaultRequestIDHeader)).Info("parallel")
@@ -264,7 +266,7 @@ func TestConcurrentRequestsDoNotLeakFields(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			req := httptest.NewRequest(http.MethodGet, "/parallel", nil)
-			reqID := fmt.Sprintf("req-%d", i)
+			reqID := fmt.Sprintf("00000000-0000-0000-0000-%012d", i)
 			req.Header.Set(defaultRequestIDHeader, reqID)
 			resp := httptest.NewRecorder()
 			router.ServeHTTP(resp, req)
@@ -290,6 +292,8 @@ func TestConcurrentRequestsDoNotLeakFields(t *testing.T) {
 			t.Fatalf("message_id %q was enriched with request_id %q", key, value)
 		}
 	}
+
+	logCapturedEntry(t, "concurrent request completion log", findEntry(t, entries, defaultRequestLogMsg))
 }
 
 type capturedEntries struct {
@@ -338,4 +342,45 @@ func findEntry(t *testing.T, entries *capturedEntries, message string) map[strin
 
 	t.Fatalf("log entry %q not found", message)
 	return nil
+}
+
+func logCapturedEntry(t *testing.T, label string, entry map[string]any) {
+	t.Helper()
+
+	encoded, err := json.Marshal(entry)
+	if err != nil {
+		t.Logf("%s: <unable to marshal: %v>", label, err)
+		return
+	}
+
+	t.Logf("%s: %s", label, encoded)
+}
+
+func setupStandardLoggerForTest(t *testing.T, logger *logrus.Logger) {
+	t.Helper()
+
+	original := logrus.StandardLogger().Out
+	originalFormatter := logrus.StandardLogger().Formatter
+	originalHooks := logrus.StandardLogger().Hooks
+	originalReportCaller := logrus.StandardLogger().ReportCaller
+	originalLevel := logrus.StandardLogger().Level
+
+	logrus.SetOutput(logger.Out)
+	logrus.SetFormatter(logger.Formatter)
+	logrus.SetReportCaller(logger.ReportCaller)
+	logrus.SetLevel(logger.Level)
+	logrus.StandardLogger().ReplaceHooks(make(logrus.LevelHooks))
+	for _, level := range logrus.AllLevels {
+		for _, hook := range logger.Hooks[level] {
+			logrus.StandardLogger().AddHook(hook)
+		}
+	}
+
+	t.Cleanup(func() {
+		logrus.SetOutput(original)
+		logrus.SetFormatter(originalFormatter)
+		logrus.SetReportCaller(originalReportCaller)
+		logrus.SetLevel(originalLevel)
+		logrus.StandardLogger().ReplaceHooks(originalHooks)
+	})
 }

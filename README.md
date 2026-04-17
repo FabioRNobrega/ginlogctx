@@ -50,6 +50,17 @@ Or add it to your `go.mod`:
 require github.com/FabioRNobrega/ginlogctx
 ```
 
+## Run Tests With Docker
+
+If you do not want to install Go locally, you can run the package tests with:
+
+```shell
+make docker-test
+```
+
+The Docker setup mounts the repository into a Go container and keeps module and
+build caches in named Docker volumes so repeated test runs are faster.
+
 ## Features
 
 - Adds `request_id` automatically from `gin-contrib/requestid`
