@@ -2,7 +2,6 @@ package ginlogctx_test
 
 import (
 	"github.com/FabioRNobrega/ginlogctx"
-	ginrequestid "github.com/gin-contrib/requestid"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 )
@@ -12,7 +11,6 @@ func ExampleInstall() {
 	ginlogctx.Install(logger, ginlogctx.DefaultConfig())
 
 	router := gin.New()
-	router.Use(ginrequestid.New())
 	router.Use(ginlogctx.Middleware(ginlogctx.DefaultConfig()))
 }
 
@@ -31,6 +29,5 @@ func ExampleMiddleware_customFields() {
 	}
 
 	router := gin.New()
-	router.Use(ginrequestid.New())
 	router.Use(ginlogctx.Middleware(cfg))
 }

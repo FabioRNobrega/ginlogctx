@@ -22,7 +22,20 @@
     </a>
 </p>
 
-`ginlogctx` is a small Go package that enriches `logrus` entries with request-scoped fields inside Gin handlers.
+`ginlogctx` is a small Go package that gives Gin services an out-of-the-box
+request ID flow and enriches `logrus` entries with request-scoped fields inside
+handlers.
+
+Under the hood, it builds on the idea behind `github.com/gin-contrib/requestid`
+and packages that behavior together with Logrus request-scoped enrichment, so a
+service can:
+- generate or reuse a request ID for every Gin request
+- attach that `request_id` automatically to application logs
+- extend the same request context with custom fields such as `user_id`
+
+The goal is to cover the common "I need correlated logs per request" use case
+without forcing small and medium projects into the complexity of a full
+observability stack.
 
 Out of the box it adds:
 - `request_id`
@@ -35,8 +48,10 @@ And it lets applications add any extra request-scoped fields they want, such as:
 
 It is designed for teams that already use:
 - `github.com/gin-gonic/gin`
-- `github.com/gin-contrib/requestid`
 - `github.com/sirupsen/logrus`
+
+If you are comparing this package with a tracing stack, see:
+- [OpenTelemetry vs ginlogctx](./docs/OPENTELEMETRY.md)
 
 ## Installation
 
@@ -63,13 +78,32 @@ build caches in named Docker volumes so repeated test runs are faster.
 
 ## Features
 
-- Adds `request_id` automatically from `gin-contrib/requestid`
+- Provides request ID handling out of the box and adds `request_id` automatically
 - Enriches plain `logrus.Info/Error/Warn/...` calls through a Logrus hook
 - Supports custom request-scoped fields through resolvers
 - Includes optional request completion logging
 - Keeps the built-in request completion log focused on HTTP fields instead of caller metadata
 - Preserves explicitly set log fields instead of overwriting them
 - Keeps setup small and easy to drop into existing Gin services
+
+## Why Use It
+
+`ginlogctx` is a good fit when you want:
+- request-level correlation in logs
+- a simple `request_id` story for Gin services
+- custom fields like `user_id`, `tenant_id`, or `product_id`
+- log-based tracking in tools such as Datadog without introducing tracing or APM first
+
+It is intentionally a lighter approach than full distributed tracing. For many
+services, especially internal APIs and smaller systems, correlated logs are
+enough to answer:
+- which logs belong to this request?
+- which user triggered it?
+- what happened across my services if I forward the same request ID?
+
+If later you need full spans, distributed traces, baggage, and cross-process
+trace visualization, you can still adopt OpenTelemetry on top of or alongside
+this approach.
 
 ## How It Works
 
@@ -80,9 +114,6 @@ This means:
 - It does not automatically follow spawned goroutines
 - Background work should propagate context explicitly if you want the same fields there
 
-Also note:
-- `requestid.New(...)` should run before `ginlogctx.Middleware(...)`
-
 ## Quick Start
 
 This is the minimal setup. It gives you `request_id` out of the box.
@@ -92,7 +123,6 @@ package main
 
 import (
 	"github.com/FabioRNobrega/ginlogctx"
-	ginrequestid "github.com/gin-contrib/requestid"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 )
@@ -101,7 +131,6 @@ func main() {
 	ginlogctx.Install(logrus.StandardLogger(), ginlogctx.DefaultConfig())
 
 	r := gin.New()
-	r.Use(ginrequestid.New())
 	r.Use(ginlogctx.Middleware(ginlogctx.DefaultConfig()))
 
 	r.GET("/ping", func(c *gin.Context) {
@@ -198,7 +227,6 @@ package main
 
 import (
 	"github.com/FabioRNobrega/ginlogctx"
-	ginrequestid "github.com/gin-contrib/requestid"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 )
@@ -225,7 +253,6 @@ func main() {
 	ginlogctx.Install(logrus.StandardLogger(), cfg)
 
 	r := gin.New()
-	r.Use(ginrequestid.New(ginrequestid.WithCustomHeaderStrKey("X-Request-ID")))
 	r.Use(ginlogctx.Middleware(cfg))
 
 	r.GET("/products/:product_id", func(c *gin.Context) {

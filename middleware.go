@@ -19,12 +19,19 @@ func Middleware(cfg Config) gin.HandlerFunc {
 	cfg = normalizeConfig(cfg)
 
 	return func(c *gin.Context) {
-		fields := scopedFieldsForRequest(c, cfg)
-		unbind := bindFields(fields)
-		defer unbind()
-
 		startedAt := time.Now()
-		c.Next()
+		var unbind func()
+
+		ginrequestid.New(
+			ginrequestid.WithCustomHeaderStrKey(ginrequestid.HeaderStrKey(cfg.RequestIDHeader)),
+			ginrequestid.WithHandler(func(c *gin.Context, _ string) {
+				unbind = bindFields(scopedFieldsForRequest(c, cfg))
+			}),
+		)(c)
+
+		if unbind != nil {
+			defer unbind()
+		}
 
 		if !cfg.IncludeRequestLog {
 			return

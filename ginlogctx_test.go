@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	ginrequestid "github.com/gin-contrib/requestid"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 )
@@ -34,7 +33,6 @@ func TestHookAddsScopedFields(t *testing.T) {
 	setupStandardLoggerForTest(t, logger)
 
 	router := gin.New()
-	router.Use(ginrequestid.New())
 	cfg := DefaultConfig()
 	cfg.Fields = []Field{
 		{
@@ -81,7 +79,6 @@ func TestHookDoesNotOverwriteExplicitFields(t *testing.T) {
 	setupStandardLoggerForTest(t, logger)
 
 	router := gin.New()
-	router.Use(ginrequestid.New())
 	router.Use(Middleware(DefaultConfig()))
 	router.GET("/hook", func(c *gin.Context) {
 		logger.WithField(defaultRequestIDField, "explicit").Info("inside handler")
@@ -122,7 +119,6 @@ func TestMiddlewareRequestCompletedLog(t *testing.T) {
 	setupStandardLoggerForTest(t, logger)
 
 	router := gin.New()
-	router.Use(ginrequestid.New())
 	cfg := DefaultConfig()
 	cfg.Fields = []Field{
 		{
@@ -194,7 +190,6 @@ func TestMiddlewareSupportsCustomFields(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.Use(ginrequestid.New())
 	router.Use(Middleware(cfg))
 	router.GET("/hook", func(c *gin.Context) {
 		logger.Info("inside handler")
@@ -223,7 +218,6 @@ func TestBindingClearedAfterRequest(t *testing.T) {
 	setupStandardLoggerForTest(t, logger)
 
 	router := gin.New()
-	router.Use(ginrequestid.New())
 	router.Use(Middleware(DefaultConfig()))
 	router.GET("/done", func(c *gin.Context) {
 		logger.Info("inside handler")
@@ -252,7 +246,6 @@ func TestConcurrentRequestsDoNotLeakFields(t *testing.T) {
 	setupStandardLoggerForTest(t, logger)
 
 	router := gin.New()
-	router.Use(ginrequestid.New())
 	router.Use(Middleware(DefaultConfig()))
 	router.GET("/parallel", func(c *gin.Context) {
 		logger.WithField("message_id", c.GetHeader(defaultRequestIDHeader)).Info("parallel")
@@ -294,6 +287,38 @@ func TestConcurrentRequestsDoNotLeakFields(t *testing.T) {
 	}
 
 	logCapturedEntry(t, "concurrent request completion log", findEntry(t, entries, defaultRequestLogMsg))
+}
+
+func TestMiddlewareGeneratesRequestIDOutOfBox(t *testing.T) {
+	t.Setenv("GIN_MODE", gin.TestMode)
+	gin.SetMode(gin.TestMode)
+
+	logger, entries := newTestLogger()
+	Install(logger, DefaultConfig())
+	setupStandardLoggerForTest(t, logger)
+
+	router := gin.New()
+	router.Use(Middleware(DefaultConfig()))
+	router.GET("/generated", func(c *gin.Context) {
+		logger.Info("generated request id")
+		c.Status(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/generated", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	requestID := resp.Header().Get(defaultRequestIDHeader)
+	if requestID == "" {
+		t.Fatalf("response %s header is empty", defaultRequestIDHeader)
+	}
+
+	logEntry := findEntry(t, entries, "generated request id")
+	logCapturedEntry(t, "generated request id log", logEntry)
+	if logEntry[defaultRequestIDField] != requestID {
+		t.Fatalf("request_id = %v, want %s", logEntry[defaultRequestIDField], requestID)
+	}
 }
 
 type capturedEntries struct {

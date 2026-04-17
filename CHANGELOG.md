@@ -5,6 +5,17 @@ All notable changes to `ginlogctx` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-04-17
+
+### Added
+- Out-of-the-box request ID generation inside `ginlogctx.Middleware`
+- Documentation explaining when `ginlogctx` is a simpler alternative to OpenTelemetry and APM
+
+### Changed
+- Simplified consumer setup so Gin services no longer need to add `gin-contrib/requestid` separately
+- Updated examples and tests to reflect the package-owned request ID flow
+- Improved README positioning around request correlation, logs, and Datadog-style log tracking
+
 ## [0.1.1] - 2026-04-17
 
 ### Added
