@@ -347,6 +347,11 @@ For the repository Git workflow, branch naming, commit prefixes, and tag convent
 - [Contributing Guide](./docs/CONTRIBUTING.md)
 - [Changelog](./CHANGELOG.md)
 
+### Contributors
+
+![contributors](https://contrib.rocks/image?repo=FabioRNobrega/ginlogctx)
+
+
 ## License
 
 MIT [© FabioRNobrega](./LICENSE)
